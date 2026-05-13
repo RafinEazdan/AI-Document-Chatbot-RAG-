@@ -1,4 +1,5 @@
 .env
+app/.env
 vector_store/
 __pycache__
 *.pyc
@@ -6,3 +7,9 @@ __pycache__
 documents/
 venv/
 .venv/
+
+# Research artifacts — keep the directories (.gitkeep) but ignore contents.
+logs/
+benchmarks/results/*
+!benchmarks/results/.gitkeep
+.pytest_cache/

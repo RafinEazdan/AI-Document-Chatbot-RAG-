@@ -45,26 +45,32 @@ def ask(
     memory: ConversationMemory,
     llm_provider: ILLMProvider,
     guard: IGuard,
-) -> str:
+) -> Dict[str, object]:
     """
     Full RAG pipeline for a single question.
 
-    1. Check for prompt injection (regex → LLM guard if suspicious)
-    2. Retrieve relevant chunks
-    3. Build grounded prompt with conversation history
-    4. Call LLM
-    5. Return answer with citations
+    Returns a dict ``{"answer": str, "results": List[RetrievalResult],
+    "blocked": bool}`` so callers can render citations without re-running
+    retrieval (single-source-of-truth retrieval — important for
+    reproducibility).
+
+    Steps:
+      1. Prompt injection check (regex → LLM guard if suspicious)
+      2. Retrieve relevant chunks
+      3. Build grounded prompt with conversation history
+      4. Call LLM
+      5. Return answer + retrieval results
     """
     # Step 1: Prompt injection check
     is_safe, warning = guard.check(question)
     if not is_safe:
-        return warning
+        return {"answer": warning, "results": [], "blocked": True}
 
     # Step 2: Retrieve relevant chunks
     results = retrieve(question, embedding_manager)
 
     if not results:
-        return Config.NOT_FOUND_RESPONSE
+        return {"answer": Config.NOT_FOUND_RESPONSE, "results": [], "blocked": False}
 
     # Step 3: Build messages
     context_block = build_context_block(results)
@@ -88,6 +94,4 @@ def ask(
     memory.add_turn("user", question)
     memory.add_turn("assistant", answer)
 
-    # Step 6: Append citations
-    citations = format_citations(results)
-    return f"{answer}\n{citations}"
+    return {"answer": answer, "results": results, "blocked": False}

@@ -1,7 +1,6 @@
 """Chat service — handles question answering and conversation memory."""
 
 from app.memory.chain import ask
-from app.rag.retriever import retrieve
 from app.core.interfaces import IEmbeddingManager, ILLMProvider, IGuard
 from app.memory.memory import ConversationMemory
 
@@ -13,8 +12,13 @@ def ask_question(
     llm_provider: ILLMProvider,
     guard: IGuard,
 ) -> dict:
-    """Process a question through the RAG pipeline."""
-    full_answer = ask(
+    """Process a question through the RAG pipeline.
+
+    The chain returns a single retrieval result set; we render sources
+    from those exact results so the API response and the prompt context
+    can never disagree (single-source-of-truth retrieval).
+    """
+    out = ask(
         question,
         embedding_manager,
         memory,
@@ -22,19 +26,20 @@ def ask_question(
         guard=guard,
     )
 
-    answer_text = full_answer.split("\n📎 Sources:")[0].strip()
-
-    results = retrieve(question, embedding_manager)
     sources = [
         {
             "chunk_index": r.chunk_index,
             "score": round(r.score, 4),
             "preview": r.content[:120].replace("\n", " "),
         }
-        for r in results
+        for r in out["results"]
     ]
 
-    return {"answer": answer_text, "sources": sources}
+    return {
+        "answer": out["answer"],
+        "sources": sources,
+        "blocked": out.get("blocked", False),
+    }
 
 
 def clear_memory(memory: ConversationMemory) -> str:

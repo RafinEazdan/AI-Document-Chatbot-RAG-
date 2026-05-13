@@ -1,0 +1,109 @@
+# Two-Tier Prompt Injection Guard — Tier 1 regex pattern bank.
+#
+# Each entry is a labeled, IGNORECASE regex tested against incoming user text.
+# Patterns are grouped by attack family so researchers can ablate categories
+# (e.g. drop the "encoding" group to measure regex contribution to detection).
+#
+# Versioned via the `version` field below; the guard stamps this version into
+# every decision record written to the JSONL trace.
+version: "1.0.0"
+groups:
+  instruction_override:
+    - id: io_ignore_prior
+      pattern: "ignore (all |any )?(previous|prior|above) (instructions|prompts|rules)"
+    - id: io_disregard_prior
+      pattern: "disregard (all |any )?(previous|prior|above)"
+    - id: io_forget_prior
+      pattern: "forget (all |any )?(previous|prior|above)"
+    - id: io_you_are_now
+      pattern: "you are now"
+    - id: io_new_instruction
+      pattern: "new instruction"
+    - id: io_system_prompt
+      pattern: "system prompt"
+    - id: io_override
+      pattern: "override"
+
+  role_hijack:
+    - id: rh_pretend
+      pattern: "pretend (you are|to be)"
+    - id: rh_act_as
+      pattern: "act as"
+    - id: rh_jailbreak
+      pattern: "jailbreak"
+    - id: rh_dan
+      pattern: "do anything now"
+    - id: rh_dan_mode
+      pattern: "DAN mode"
+    - id: rh_assume_role
+      pattern: "assume the role of"
+    - id: rh_take_role
+      pattern: "take on the role of"
+    - id: rh_must_act
+      pattern: "you must act as"
+    - id: rh_no_longer
+      pattern: "you are no longer"
+    - id: rh_switch
+      pattern: "switch to"
+    - id: rh_become
+      pattern: "become (a|an)"
+    - id: rh_roleplay
+      pattern: "roleplay as"
+    - id: rh_simulate
+      pattern: "simulate (a|an)"
+    - id: rh_suppose
+      pattern: "suppose you are"
+
+  prompt_extraction:
+    - id: pe_reveal_prompt
+      pattern: "reveal (the )?(system|hidden|initial) prompt"
+    - id: pe_show_instructions
+      pattern: "show (me )?(your )?(system|hidden) instructions"
+    - id: pe_print_prompt
+      pattern: "print (the )?prompt"
+    - id: pe_display_msg
+      pattern: "display (the )?(system|hidden) message"
+    - id: pe_what_were_told
+      pattern: "what were you told"
+    - id: pe_what_instructions
+      pattern: "what instructions were given"
+    - id: pe_repeat_instructions
+      pattern: "repeat (your|the) instructions"
+
+  policy_bypass:
+    - id: pb_bypass
+      pattern: "bypass (all )?(rules|restrictions|filters)"
+    - id: pb_without_restrictions
+      pattern: "without (any )?(restrictions|limitations)"
+    - id: pb_disable_safety
+      pattern: "disable (safety|filters)"
+    - id: pb_remove_limits
+      pattern: "remove (all )?(limitations|restrictions)"
+
+  privilege_claim:
+    - id: pc_i_am_dev
+      pattern: "i am (the )?(developer|admin|system)"
+    - id: pc_as_dev
+      pattern: "as (a )?(developer|admin)"
+    - id: pc_system_msg
+      pattern: "this is a system message"
+    - id: pc_authorized
+      pattern: "authorized override"
+    - id: pc_dev_mode
+      pattern: "developer mode"
+    - id: pc_debug_mode
+      pattern: "debug mode"
+
+  encoding_evasion:
+    - id: ee_base64
+      pattern: "base64"
+    - id: ee_rot13
+      pattern: "rot13"
+    - id: ee_hex
+      pattern: "hex decode"
+    - id: ee_decode
+      pattern: "decode this"
+    - id: ee_obfuscate
+      pattern: "obfuscate"
+    - id: ee_encoded
+      pattern: "encoded message"

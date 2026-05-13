@@ -1,0 +1,19 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.git/
+.gitignore
+.pytest_cache/
+
+# Research artifacts shouldn't bloat the runtime image.
+benchmarks/results/
+logs/
+research_possibility_report.md
+docs/
+tests/
+
+# Don't bake secrets into the image.
+.env
+app/.env

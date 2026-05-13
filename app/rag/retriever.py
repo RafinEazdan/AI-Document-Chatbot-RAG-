@@ -19,9 +19,19 @@ def retrieve(
     query: str,
     embedding_manager: IEmbeddingManager,
     top_k: Optional[int] = None,
+    config: Optional[Config] = None,
 ) -> List[RetrievalResult]:
-    """Search the index for the most relevant chunks."""
-    top_k = top_k or Config.TOP_K
+    """Search the index for the most relevant chunks.
+
+    ``top_k`` is resolved in this priority order so DI overrides actually
+    take effect: explicit argument → injected ``config`` → process Config.
+    """
+    if top_k is None:
+        top_k = (config or Config).TOP_K
+
+    if embedding_manager.index is None or not embedding_manager.chunks:
+        return []
+
     query_vec = embedding_manager.embed_query(query)
 
     scores, indices = embedding_manager.index.search(query_vec, top_k)

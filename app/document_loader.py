@@ -1,7 +1,8 @@
 """Load and chunk PDF/DOCX documents."""
 
-import os
 import glob
+import logging
+import os
 from typing import List
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -66,7 +67,10 @@ def chunk_text(text: str) -> List[Document]:
         separators=["\n\n", "\n", ". ", " ", ""],
     )
     chunks = splitter.create_documents([text])
-    print(f"  Created {len(chunks)} chunks (size={Config.CHUNK_SIZE}, overlap={Config.CHUNK_OVERLAP})")
+    logging.getLogger(__name__).info(
+        "Created %d chunks (size=%d, overlap=%d)",
+        len(chunks), Config.CHUNK_SIZE, Config.CHUNK_OVERLAP,
+    )
     return chunks
 
 

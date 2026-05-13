@@ -38,8 +38,15 @@ def get_llm_provider(
 def get_guard(
     config: Annotated[Config, Depends(get_config)],
 ) -> IGuard:
+    from pathlib import Path
     from app.rag.guard import TwoTierGuard
-    return TwoTierGuard(config)
+    return TwoTierGuard(
+        config,
+        patterns_path=Path(config.GUARD_PATTERNS_PATH),
+        judge_prompt_path=Path(config.GUARD_JUDGE_PROMPT_PATH),
+        trace_path=Path(config.GUARD_TRACE_PATH),
+        enable_trace=config.GUARD_TRACE_ENABLED,
+    )
 
 
 def get_document_loader(

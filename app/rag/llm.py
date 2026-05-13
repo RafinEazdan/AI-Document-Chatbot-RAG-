@@ -14,6 +14,7 @@ class GeminiProvider(ILLMProvider):
     def __init__(self, config: Config) -> None:
         genai.configure(api_key=config.GEMINI_API_KEY)
         self._model_name = config.GEMINI_MODEL
+        self._temperature = getattr(config, "LLM_TEMPERATURE", 0.0)
 
     def complete(self, messages: List[Dict[str, str]]) -> str:
         system_parts = []
@@ -35,12 +36,22 @@ class GeminiProvider(ILLMProvider):
             system_instruction=system_instruction,
         )
 
+        gen_config = {"temperature": self._temperature}
+
         if len(history) > 1:
             chat = model.start_chat(history=history[:-1])
-            response = chat.send_message(history[-1]["parts"][0])
+            response = chat.send_message(
+                history[-1]["parts"][0],
+                generation_config=gen_config,
+            )
         else:
             response = model.generate_content(
-                history[0]["parts"][0] if history else ""
+                history[0]["parts"][0] if history else "",
+                generation_config=gen_config,
             )
 
-        return response.text.strip()
+        text = getattr(response, "text", None)
+        if text is None:
+            # Gemini may return no text when safety filters trigger.
+            return Config.NOT_FOUND_RESPONSE
+        return text.strip()

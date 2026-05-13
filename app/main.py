@@ -1,5 +1,6 @@
 """RAG Document Chatbot — FastAPI Server."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,6 +11,13 @@ from app.core.dependencies import get_config
 from app.memory.memory import ConversationMemory
 from app.rag.embeddings import EmbeddingManager
 from app.schemas.schemas import HealthResponse
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -23,9 +31,9 @@ async def lifespan(app: FastAPI):
     # Attempt to load a previously saved FAISS index
     em = EmbeddingManager(config)
     if em.load_index():
-        print("Loaded existing vector index on startup.")
+        logger.info("Loaded existing vector index on startup.")
     else:
-        print("No existing index found. Upload a document via POST /documents/upload")
+        logger.info("No existing index found. Upload a document via POST /documents/upload")
 
     app.state.embedding_manager = em
 

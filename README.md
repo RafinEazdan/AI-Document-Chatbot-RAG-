@@ -24,6 +24,8 @@ A production-grade, hallucination-free chatbot that answers questions **strictly
 - [API Endpoints](#api-endpoints)
 - [Configuration](#configuration)
 - [Docker Deployment](#docker-deployment)
+- [Research Use](#research-use)
+- [Reproducibility Statement](#reproducibility-statement)
 
 ---
 
@@ -123,20 +125,49 @@ csn-demo/
 
 ### Two-Tier Prompt Injection Guard
 
-The system implements a **layered defense** against prompt injection attacks:
+The system's headline contribution is a **layered, measurable defense**
+against prompt-injection attacks. The full design document — including
+attack-family taxonomy, falsifiable claims, evaluation protocol, and
+ablations — lives at [docs/two_tier_guard.md](docs/two_tier_guard.md).
 
 | Tier | Method | Cost | When it runs |
 |------|--------|------|-------------|
-| **Tier 1** | Regex pattern matching | Near-zero latency | Every request |
-| **Tier 2** | LLM-based classification (Gemini) | ~200ms, 1 API call | Only when Tier 1 flags the input as suspicious |
+| **Tier 1** | Regex pattern bank ([configs/guard/patterns.yaml](configs/guard/patterns.yaml)) | Microseconds, free | Every request |
+| **Tier 2** | LLM judge (Gemini, temperature=0, single-token output) | ~200ms, 1 API call | Only when Tier 1 fires |
 
 **How it works:**
 
-1. **Tier 1 (Regex Guard)** — A compiled set of 40+ regex patterns checks for known injection phrases (e.g., `"ignore previous instructions"`, `"you are now"`, `"jailbreak"`, `"reveal system prompt"`, `"DAN mode"`, etc.). This is extremely fast and catches the vast majority of injection attempts with zero API cost.
+1. **Tier 1 (Regex Guard)** — 44 IGNORECASE patterns grouped by attack
+   family (`instruction_override`, `role_hijack`, `prompt_extraction`,
+   `policy_bypass`, `privilege_claim`, `encoding_evasion`). Externalized
+   to a versioned YAML so researchers can edit and ablate the pattern
+   bank without touching Python; the version string is stamped into
+   every decision record.
 
-2. **Tier 2 (LLM Guard)** — If (and only if) Tier 1 flags the input as suspicious, a secondary Gemini model (`LLM_GUARD_MODEL`) acts as a binary classifier to confirm whether the input is truly an injection attempt. This prevents false positives — legitimate questions that happen to contain flagged words (e.g., *"What is the override procedure for the safety system?"*) are allowed through.
+2. **Tier 2 (LLM Guard)** — A focused security-classifier prompt
+   ([configs/guard/judge_prompt.txt](configs/guard/judge_prompt.txt))
+   that emits a single `yes`/`no` token. Catches Tier 1 false positives
+   (legitimate questions containing flagged surface forms like *"act as
+   a guide and walk me through Article 7"*).
 
-**Why two tiers?** A regex-only guard is fast but produces false positives. An LLM-only guard is accurate but wastes API calls and latency on every request. The two-tier approach gives us the best of both: near-zero cost for clean inputs, high accuracy for ambiguous ones.
+**Why two tiers?** A regex-only guard has high recall but low precision
+on adversarial benigns. An LLM-only guard is accurate but pays the cost
+on every request. Two-tier gives the precision of an LLM-only filter at
+the cost of regex-only on the dominant clean-input path. The
+[evaluation harness](benchmarks/run_guard_eval.py) measures and reports
+this trade-off as `llm_invocation_rate`.
+
+**Observability.** Every guard decision is appended as a JSON line to
+`logs/guard_trace.jsonl` with per-tier latency, matched pattern id, LLM
+verdict, and pattern-bank version — so any production decision can be
+replayed offline for error analysis without re-running the pipeline.
+
+**Reproduce the numbers:**
+
+```bash
+python -m benchmarks.run_guard_eval              # full eval (needs GEMINI_API_KEY)
+python -m benchmarks.run_guard_eval --skip-llm   # offline, regex-only
+```
 
 ---
 
@@ -379,3 +410,103 @@ During deployment on Render, the application exceeded the 512MB memory limit due
 Since the primary goal of this project was to demonstrate the RAG pipeline and conversational behavior, I did not optimize for low-memory deployment environments.
 
 In a production setting, this could be addressed by using a lighter embedding model, external vector databases (such as. Pinecone etc), or a higher-memory hosting plan.
+
+---
+
+## Research Use
+
+This codebase is designed to double as a research platform for studies on
+prompt-injection defenses, retrieval, and grounded generation. Most of the
+research surface lives **alongside** the production code rather than inside it,
+so the API stays clean.
+
+### Headline contribution — two-tier prompt-injection guard
+
+A measurable, layered defense (Tier 1 regex bank → Tier 2 LLM judge) with
+an externalized, versioned pattern bank, a labeled benchmark dataset,
+JSONL decision tracing, and a one-command evaluation harness that
+compares three configurations (`regex_only`, `llm_only`, `two_tier`) on
+the same data and writes a CSV/manifest pair you can drop straight into
+a paper.
+
+Full design + claims + protocol: [docs/two_tier_guard.md](docs/two_tier_guard.md).
+
+### Research artifacts in this repo
+
+| Path | Purpose |
+|---|---|
+| [docs/two_tier_guard.md](docs/two_tier_guard.md) | Standalone design + evaluation document for the two-tier guard. |
+| [configs/guard/patterns.yaml](configs/guard/patterns.yaml) | Versioned regex pattern bank, grouped by attack family. |
+| [configs/guard/judge_prompt.txt](configs/guard/judge_prompt.txt) | LLM judge system prompt (editable, no code change). |
+| [benchmarks/injections.jsonl](benchmarks/injections.jsonl) | 80-row labeled dataset (50 injections × 6 families + 30 benigns inc. adversarial). |
+| [benchmarks/run_guard_eval.py](benchmarks/run_guard_eval.py) | Evaluation harness — precision/recall/F1/latency/cost per config. |
+| [benchmarks/results/](benchmarks/results/) | Versioned per-run outputs (`summary.csv`, `per_example.jsonl`, `manifest.json`). |
+| [tests/test_guard.py](tests/test_guard.py) | 18 deterministic, offline unit tests for the guard. |
+| `logs/guard_trace.jsonl` | Append-only JSONL trace of every guard decision in production. |
+
+### Running the evaluation
+
+```bash
+# Offline (regex-only baseline, no API key)
+python -m benchmarks.run_guard_eval --skip-llm
+
+# Full eval (regex_only + llm_only + two_tier)
+python -m benchmarks.run_guard_eval
+
+# Ablations
+python -m benchmarks.run_guard_eval --patterns my_patterns.yaml
+python -m benchmarks.run_guard_eval --judge-prompt my_prompt.txt
+python -m benchmarks.run_guard_eval --dataset multilingual.jsonl
+```
+
+Each run writes a timestamped folder under `benchmarks/results/` containing:
+* `summary.csv` — one row per configuration.
+* `per_example.jsonl` — every decision (id, tier reached, latencies, verdict).
+* `manifest.json` — dataset SHA1, pattern-bank version, judge model + temperature.
+
+### Tests
+
+```bash
+pip install pytest
+pytest tests/                     # 18 tests, fully offline
+```
+
+---
+
+## Reproducibility Statement
+
+The intent of this section is that a second researcher with this repo
+and a Gemini API key can re-derive the reported numbers byte-for-byte.
+
+* **Pinned dependencies.** `requirements.txt` uses exact `==` versions
+  for every package the eval depends on. No `>=` ranges remain.
+* **Determinism.**
+  * Tier-1 regex is deterministic by construction.
+  * Both the answering LLM and the Tier-2 judge are configured with
+    `temperature=0.0` (`LLM_TEMPERATURE`, `LLM_GUARD_TEMPERATURE`).
+  * Embedding model: `all-MiniLM-L6-v2` (deterministic for a given
+    `sentence-transformers` version).
+  * FAISS uses `IndexFlatIP` over L2-normalised vectors → exact cosine
+    search, no approximate-search noise.
+* **Index integrity.** Every saved index writes
+  `vector_store/index_meta.json` with the embedding model name and
+  vector dimension. `EmbeddingManager.load_index` refuses to load an
+  index that was saved under a different embedding model — silently
+  mixing embedding spaces is impossible.
+* **Run provenance.** Every eval run writes `manifest.json` recording:
+  dataset path + SHA1, pattern-bank `version:` field, judge model name,
+  judge temperature, UTC timestamp, run id.
+* **Trace provenance.** Every production decision in
+  `logs/guard_trace.jsonl` records `pattern_version`, so a trace can be
+  matched against the exact pattern bank that produced it.
+* **Hardware.** All numbers in `benchmarks/results/` should be tagged
+  with the machine that produced them when reported externally
+  (CPU / RAM / OS). Latency is wall-clock and will vary across machines;
+  precision / recall / F1 are deterministic and will not.
+* **What is NOT yet pinned.** The Gemini judge model is a hosted API and
+  can change on Google's side without a version bump. We pin the model
+  *name* (`gemini-2.5-flash-lite` by default) and the request-time
+  parameters; the model weights themselves are not under our control.
+  Re-runs against the same model name on a different date may shift
+  Tier-2 numbers slightly. Mitigation: include the manifest UTC
+  timestamp when citing results.

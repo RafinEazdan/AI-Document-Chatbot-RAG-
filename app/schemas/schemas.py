@@ -45,6 +45,7 @@ class SourceChunk(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     sources: list[SourceChunk]
+    blocked: bool = False
 
 
 class ClearMemoryResponse(BaseModel):
